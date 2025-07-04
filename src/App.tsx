@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Save, FileText, Users, Edit } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Save,
+  FileText,
+  Users,
+  Edit,
+  BarChart2,
+} from "lucide-react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 
 // Replace with your deployed Google Apps Script Web App URL
 const scriptURL =
-  "https://script.google.com/macros/s/AKfycbx2IwzfBxA8ojlecMnJ5Er2vwJOGWoXwkk9P5MKi76jaNX4PicYF0ldXarLxgWTFt9qFQ/exec";
+  "https://script.google.com/macros/s/AKfycbxaX9J7a1vB4BJrJLJv87hlJJtOzbOrfhjm9AKQ9QLafUcENGnD6IEysHwhXyLiTuR8Rg/exec";
 
 interface QuizQuestion {
   id: string;
@@ -21,6 +29,36 @@ interface Student {
   id: string;
   nisn: string;
   nama_siswa: string;
+}
+
+interface ExamResult {
+  nama: string;
+  mata_pelajaran: string;
+  bab_nama: string;
+  nilai: number;
+  persentase: number;
+  timestamp: string;
+  jenis_ujian: string;
+  soal_1: string;
+  soal_2: string;
+  soal_3: string;
+  soal_4: string;
+  soal_5: string;
+  soal_6: string;
+  soal_7: string;
+  soal_8: string;
+  soal_9: string;
+  soal_10: string;
+  soal_11: string;
+  soal_12: string;
+  soal_13: string;
+  soal_14: string;
+  soal_15: string;
+  soal_16: string;
+  soal_17: string;
+  soal_18: string;
+  soal_19: string;
+  soal_20: string;
 }
 
 const QuizMaker: React.FC = () => {
@@ -768,6 +806,172 @@ const StudentData: React.FC = () => {
   );
 };
 
+const ExamResults: React.FC = () => {
+  const [examResults, setExamResults] = useState<ExamResult[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+
+  const fetchExamResults = () => {
+    fetch(`${scriptURL}?action=getExamResults`, {
+      method: "GET",
+      mode: "cors",
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Response from getExamResults:", data);
+        if (data.success && Array.isArray(data.data)) {
+          const formattedResults = data.data.map((result: any) => {
+            console.log(`Result for ${result.nama || "Unknown"}:`, result);
+            return {
+              nama: result.nama || "",
+              mata_pelajaran: result.mata_pelajaran || "",
+              bab_nama: result.bab_nama || "",
+              nilai: Number(result.nilai) || 0,
+              persentase: Number(result.persentase) || 0,
+              timestamp: result.timestamp || "",
+              jenis_ujian: result.jenis_ujian || "",
+              soal_1: String(result.soal_1 || ""),
+              soal_2: String(result.soal_2 || ""),
+              soal_3: String(result.soal_3 || ""),
+              soal_4: String(result.soal_4 || ""),
+              soal_5: String(result.soal_5 || ""),
+              soal_6: String(result.soal_6 || ""),
+              soal_7: String(result.soal_7 || ""),
+              soal_8: String(result.soal_8 || ""),
+              soal_9: String(result.soal_9 || ""),
+              soal_10: String(result.soal_10 || ""),
+              soal_11: String(result.soal_11 || ""),
+              soal_12: String(result.soal_12 || ""),
+              soal_13: String(result.soal_13 || ""),
+              soal_14: String(result.soal_14 || ""),
+              soal_15: String(result.soal_15 || ""),
+              soal_16: String(result.soal_16 || ""),
+              soal_17: String(result.soal_17 || ""),
+              soal_18: String(result.soal_18 || ""),
+              soal_19: String(result.soal_19 || ""),
+              soal_20: String(result.soal_20 || ""),
+            };
+          });
+          console.log("Formatted exam results:", formattedResults);
+          // Only update state if data has changed
+          if (
+            JSON.stringify(formattedResults) !== JSON.stringify(examResults)
+          ) {
+            setExamResults(formattedResults);
+          }
+        } else {
+          setError("❌ Gagal mengambil data hasil ujian dari HasilUjian.");
+          console.error("Error fetching exam results:", data.message);
+        }
+        setIsLoading(false);
+      })
+      .catch((error) => {
+        setError("❌ Gagal mengambil data hasil ujian dari HasilUjian.");
+        console.error("Fetch error:", error);
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    // Initial fetch
+    fetchExamResults();
+
+    // Set up polling every 1 seconds
+    const intervalId = setInterval(fetchExamResults, 1000);
+
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId);
+  }, []);
+
+  return (
+    <div className="container mx-auto p-4">
+      <h2 className="text-2xl font-bold mb-4">Hasil Ujian</h2>
+      {isLoading && <p>Loading...</p>}
+      {error && <p className="text-red-500">{error}</p>}
+      {!isLoading && !error && (
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border">
+            <thead>
+              <tr>
+                <th className="py-2 px-4 border">Nama</th>
+                <th className="py-2 px-4 border">Mata Pelajaran</th>
+                <th className="py-2 px-4 border">Bab</th>
+                <th className="py-2 px-4 border">Nilai</th>
+                <th className="py-2 px-4 border">Persentase</th>
+                <th className="py-2 px-4 border">Tanggal</th>
+                <th className="py-2 px-4 border">Jenis Ujian</th>
+                <th className="py-2 px-4 border">Soal 1</th>
+                <th className="py-2 px-4 border">Soal 2</th>
+                <th className="py-2 px-4 border">Soal 3</th>
+                <th className="py-2 px-4 border">Soal 4</th>
+                <th className="py-2 px-4 border">Soal 5</th>
+                <th className="py-2 px-4 border">Soal 6</th>
+                <th className="py-2 px-4 border">Soal 7</th>
+                <th className="py-2 px-4 border">Soal 8</th>
+                <th className="py-2 px-4 border">Soal 9</th>
+                <th className="py-2 px-4 border">Soal 10</th>
+                <th className="py-2 px-4 border">Soal 11</th>
+                <th className="py-2 px-4 border">Soal 12</th>
+                <th className="py-2 px-4 border">Soal 13</th>
+                <th className="py-2 px-4 border">Soal 14</th>
+                <th className="py-2 px-4 border">Soal 15</th>
+                <th className="py-2 px-4 border">Soal 16</th>
+                <th className="py-2 px-4 border">Soal 17</th>
+                <th className="py-2 px-4 border">Soal 18</th>
+                <th className="py-2 px-4 border">Soal 19</th>
+                <th className="py-2 px-4 border">Soal 20</th>
+              </tr>
+            </thead>
+            <tbody>
+              {examResults.length === 0 ? (
+                <tr>
+                  <td colSpan={27} className="py-2 px-4 border text-center">
+                    Tidak ada data hasil ujian.
+                  </td>
+                </tr>
+              ) : (
+                examResults.map((result, index) => (
+                  <tr key={index}>
+                    <td className="py-2 px-4 border">{result.nama}</td>
+                    <td className="py-2 px-4 border">
+                      {result.mata_pelajaran}
+                    </td>
+                    <td className="py-2 px-4 border">{result.bab_nama}</td>
+                    <td className="py-2 px-4 border">{result.nilai}</td>
+                    <td className="py-2 px-4 border">{result.persentase}%</td>
+                    <td className="py-2 px-4 border">{result.timestamp}</td>
+                    <td className="py-2 px-4 border">{result.jenis_ujian}</td>
+                    <td className="py-2 px-4 border">{result.soal_1}</td>
+                    <td className="py-2 px-4 border">{result.soal_2}</td>
+                    <td className="py-2 px-4 border">{result.soal_3}</td>
+                    <td className="py-2 px-4 border">{result.soal_4}</td>
+                    <td className="py-2 px-4 border">{result.soal_5}</td>
+                    <td className="py-2 px-4 border">{result.soal_6}</td>
+                    <td className="py-2 px-4 border">{result.soal_7}</td>
+                    <td className="py-2 px-4 border">{result.soal_8}</td>
+                    <td className="py-2 px-4 border">{result.soal_9}</td>
+                    <td className="py-2 px-4 border">{result.soal_10}</td>
+                    <td className="py-2 px-4 border">{result.soal_11}</td>
+                    <td className="py-2 px-4 border">{result.soal_12}</td>
+                    <td className="py-2 px-4 border">{result.soal_13}</td>
+                    <td className="py-2 px-4 border">{result.soal_14}</td>
+                    <td className="py-2 px-4 border">{result.soal_15}</td>
+                    <td className="py-2 px-4 border">{result.soal_16}</td>
+                    <td className="py-2 px-4 border">{result.soal_17}</td>
+                    <td className="py-2 px-4 border">{result.soal_18}</td>
+                    <td className="py-2 px-4 border">{result.soal_19}</td>
+                    <td className="py-2 px-4 border">{result.soal_20}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   return (
     <Router>
@@ -784,11 +988,19 @@ const App: React.FC = () => {
             <Users size={20} />
             Data Siswa
           </Link>
+          <Link
+            to="/exam-results"
+            className="flex items-center gap-2 hover:underline"
+          >
+            <BarChart2 size={20} />
+            Hasil Ujian
+          </Link>
         </div>
       </nav>
       <Routes>
         <Route path="/" element={<QuizMaker />} />
         <Route path="/students" element={<StudentData />} />
+        <Route path="/exam-results" element={<ExamResults />} />
       </Routes>
     </Router>
   );
