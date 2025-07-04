@@ -811,6 +811,22 @@ const ExamResults: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
+  // Function to format ISO date to DD/MM/YYYY
+  const formatDate = (isoDate: string): string => {
+    if (!isoDate) return "";
+    try {
+      const date = new Date(isoDate);
+      return date.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    } catch (e) {
+      console.error("Error formatting date:", e);
+      return isoDate; // Fallback to original if parsing fails
+    }
+  };
+
   const fetchExamResults = () => {
     fetch(`${scriptURL}?action=getExamResults`, {
       method: "GET",
@@ -876,8 +892,8 @@ const ExamResults: React.FC = () => {
     // Initial fetch
     fetchExamResults();
 
-    // Set up polling every 1 seconds
-    const intervalId = setInterval(fetchExamResults, 1000);
+    // Set up polling every 10 seconds
+    const intervalId = setInterval(fetchExamResults, 10000);
 
     // Clean up interval on component unmount
     return () => clearInterval(intervalId);
@@ -939,7 +955,9 @@ const ExamResults: React.FC = () => {
                     <td className="py-2 px-4 border">{result.bab_nama}</td>
                     <td className="py-2 px-4 border">{result.nilai}</td>
                     <td className="py-2 px-4 border">{result.persentase}%</td>
-                    <td className="py-2 px-4 border">{result.timestamp}</td>
+                    <td className="py-2 px-4 border">
+                      {formatDate(result.timestamp)}
+                    </td>
                     <td className="py-2 px-4 border">{result.jenis_ujian}</td>
                     <td className="py-2 px-4 border">{result.soal_1}</td>
                     <td className="py-2 px-4 border">{result.soal_2}</td>
