@@ -90,10 +90,10 @@ const QuizMaker: React.FC = () => {
         console.log("Response from getMapelData:", data);
         if (data.success && Array.isArray(data.data)) {
           setMapelData(data.data);
-          // Extract unique subjects
+          // Extract unique subjects with proper type assertion
           const uniqueSubjects = Array.from(
             new Set(data.data.map((item: MapelData) => item.mapel))
-          );
+          ) as string[];
           setSubjects(uniqueSubjects);
         } else {
           setSubmitStatus("❌ Gagal mengambil data mapel.");
