@@ -12,7 +12,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 
 // Replace with your deployed Google Apps Script Web App URL
 const scriptURL =
-  "https://script.google.com/macros/s/AKfycbxaX9J7a1vB4BJrJLJv87hlJJtOzbOrfhjm9AKQ9QLafUcENGnD6IEysHwhXyLiTuR8Rg/exec";
+  "https://script.google.com/macros/s/AKfycbwIbG-juLD9uexf9NJdEGZ4MrexfhBJ8hsJxyR5-Q2v69gXd7rJ7sdY6qPcOBK3kTi2Rg/exec";
 
 interface QuizQuestion {
   id: string;
@@ -61,45 +61,116 @@ interface ExamResult {
   soal_20: string;
 }
 
+interface MapelData {
+  mapel: string;
+  materi: string;
+  sheetName: string;
+}
+
 const QuizMaker: React.FC = () => {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitStatus, setSubmitStatus] = useState<string>("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [topics, setTopics] = useState<string[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
+  const [selectedTopic, setSelectedTopic] = useState<string>("");
+  const [selectedSheet, setSelectedSheet] = useState<string>("");
+  const [mapelData, setMapelData] = useState<MapelData[]>([]);
 
+  // Fetch subjects and topics from DataMapel sheet
   useEffect(() => {
-    fetch(`${scriptURL}?action=getQuestions`, {
+    fetch(`${scriptURL}?action=getMapelData`, {
       method: "GET",
       mode: "cors",
     })
       .then((response) => response.json())
       .then((data) => {
-        console.log("Response from getQuestions:", data);
+        console.log("Response from getMapelData:", data);
         if (data.success && Array.isArray(data.data)) {
-          const formattedQuestions = data.data.map((q: any) => ({
-            id: q.id || "",
-            soal: q.question || "",
-            gambar: q.imageUrl || "",
-            opsiA: q.options[0] || "",
-            opsiB: q.options[1] || "",
-            opsiC: q.options[2] || "",
-            opsiD: q.options[3] || "",
-            jawaban: q.answer || "A",
-          }));
-          console.log("Formatted questions:", formattedQuestions);
-          setQuestions(formattedQuestions);
+          setMapelData(data.data);
+          // Extract unique subjects
+          const uniqueSubjects = Array.from(
+            new Set(data.data.map((item: MapelData) => item.mapel))
+          );
+          setSubjects(uniqueSubjects);
         } else {
-          setSubmitStatus("❌ Gagal mengambil data soal dari Sheet2.");
-          console.error("Error fetching questions:", data.message);
+          setSubmitStatus("❌ Gagal mengambil data mapel.");
+          console.error("Error fetching mapel data:", data.message);
         }
       })
       .catch((error) => {
-        setSubmitStatus("❌ Gagal mengambil data soal dari Sheet2.");
+        setSubmitStatus("❌ Gagal mengambil data mapel.");
         console.error("Fetch error:", error);
       });
   }, []);
 
+  // Update topics when subject changes
+  useEffect(() => {
+    if (selectedSubject) {
+      const filteredTopics = mapelData
+        .filter((item) => item.mapel === selectedSubject)
+        .map((item) => item.materi);
+      setTopics(filteredTopics);
+      setSelectedTopic(""); // Reset topic when subject changes
+      setSelectedSheet(""); // Reset sheet name
+      setQuestions([]); // Clear questions
+    } else {
+      setTopics([]);
+      setSelectedTopic("");
+      setSelectedSheet("");
+      setQuestions([]);
+    }
+  }, [selectedSubject, mapelData]);
+
+  // Fetch questions when topic is selected
+  useEffect(() => {
+    if (selectedSubject && selectedTopic) {
+      const sheet = mapelData.find(
+        (item) =>
+          item.mapel === selectedSubject && item.materi === selectedTopic
+      )?.sheetName;
+      if (sheet) {
+        setSelectedSheet(sheet);
+        fetch(`${scriptURL}?action=getQuestions&sheet=${sheet}`, {
+          method: "GET",
+          mode: "cors",
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            console.log("Response from getQuestions:", data);
+            if (data.success && Array.isArray(data.data)) {
+              const formattedQuestions = data.data.map((q: any) => ({
+                id: q.id || "",
+                soal: q.question || "",
+                gambar: q.imageUrl || "",
+                opsiA: q.options[0] || "",
+                opsiB: q.options[1] || "",
+                opsiC: q.options[2] || "",
+                opsiD: q.options[3] || "",
+                jawaban: q.answer || "A",
+              }));
+              console.log("Formatted questions:", formattedQuestions);
+              setQuestions(formattedQuestions);
+            } else {
+              setSubmitStatus(`❌ Gagal mengambil data soal dari ${sheet}.`);
+              console.error("Error fetching questions:", data.message);
+            }
+          })
+          .catch((error) => {
+            setSubmitStatus(`❌ Gagal mengambil data soal dari ${sheet}.`);
+            console.error("Fetch error:", error);
+          });
+      }
+    }
+  }, [selectedSubject, selectedTopic, mapelData]);
+
   const addQuestion = () => {
+    if (!selectedSheet) {
+      setSubmitStatus("⚠️ Pilih mata pelajaran dan materi terlebih dahulu!");
+      return;
+    }
     setQuestions([
       ...questions,
       {
@@ -137,7 +208,7 @@ const QuizMaker: React.FC = () => {
 
   const saveEditedQuestion = (index: number) => {
     const questionToSave = questions[index];
-    if (!questionToSave) return;
+    if (!questionToSave || !selectedSheet) return;
 
     setIsSubmitting(true);
     setSubmitStatus("Mengirim perubahan...");
@@ -148,6 +219,7 @@ const QuizMaker: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "editQuestion",
+        sheet: selectedSheet,
         id: questionToSave.id,
         soal: questionToSave.soal,
         gambar: questionToSave.gambar,
@@ -172,30 +244,37 @@ const QuizMaker: React.FC = () => {
 
   const cancelEditing = () => {
     setEditingIndex(null);
-    fetch(`${scriptURL}?action=getQuestions`, {
-      method: "GET",
-      mode: "cors",
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data)) {
-          const formattedQuestions = data.data.map((q: any) => ({
-            id: q.id || "",
-            soal: q.question || "",
-            gambar: q.imageUrl || "",
-            opsiA: q.options[0] || "",
-            opsiB: q.options[1] || "",
-            opsiC: q.options[2] || "",
-            opsiD: q.options[3] || "",
-            jawaban: q.answer || "A",
-          }));
-          setQuestions(formattedQuestions);
-        }
+    if (selectedSheet) {
+      fetch(`${scriptURL}?action=getQuestions&sheet=${selectedSheet}`, {
+        method: "GET",
+        mode: "cors",
       })
-      .catch((error) => console.error("Error reloading questions:", error));
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data)) {
+            const formattedQuestions = data.data.map((q: any) => ({
+              id: q.id || "",
+              soal: q.question || "",
+              gambar: q.imageUrl || "",
+              opsiA: q.options[0] || "",
+              opsiB: q.options[1] || "",
+              opsiC: q.options[2] || "",
+              opsiD: q.options[3] || "",
+              jawaban: q.answer || "A",
+            }));
+            setQuestions(formattedQuestions);
+          }
+        })
+        .catch((error) => console.error("Error reloading questions:", error));
+    }
   };
 
   const handleSubmit = () => {
+    if (!selectedSheet) {
+      setSubmitStatus("⚠️ Pilih mata pelajaran dan materi terlebih dahulu!");
+      return;
+    }
+
     const hasEmptyFields = questions.some(
       (q) =>
         !q.soal.trim() ||
@@ -228,12 +307,13 @@ const QuizMaker: React.FC = () => {
       mode: "no-cors",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "addToSheet2",
+        action: "addToSheet",
+        sheet: selectedSheet,
         data: dataToSend,
       }),
     })
       .then(() => {
-        setSubmitStatus("✅ Data berhasil dikirim ke Sheet2!");
+        setSubmitStatus(`✅ Data berhasil dikirim ke ${selectedSheet}!`);
         setQuestions([...questions]);
         setIsSubmitting(false);
       })
@@ -256,9 +336,48 @@ const QuizMaker: React.FC = () => {
           </div>
 
           <p className="text-gray-600 mb-6">
-            Buat soal pilihan ganda dan kirim langsung ke Sheet2 di Google
-            Sheets Anda.
+            Pilih mata pelajaran dan materi, lalu buat soal pilihan ganda dan
+            kirim langsung ke sheet yang sesuai di Google Sheets Anda.
           </p>
+
+          {/* Subject and Topic Selection */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mata Pelajaran
+              </label>
+              <select
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Pilih Mata Pelajaran</option>
+                {subjects.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Materi
+              </label>
+              <select
+                value={selectedTopic}
+                onChange={(e) => setSelectedTopic(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={!selectedSubject}
+              >
+                <option value="">Pilih Materi</option>
+                {topics.map((topic) => (
+                  <option key={topic} value={topic}>
+                    {topic}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           {submitStatus && (
             <div
@@ -275,192 +394,195 @@ const QuizMaker: React.FC = () => {
             </div>
           )}
 
-          <div className="space-y-6">
-            {questions.map((question, index) => (
-              <div
-                key={index}
-                className="border border-gray-200 rounded-lg p-6 bg-gray-50"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    Soal {index + 1}
-                  </h3>
-                  <div className="space-x-2">
-                    {questions.length > 1 && (
+          {selectedSheet && (
+            <div className="space-y-6">
+              {questions.map((question, index) => (
+                <div
+                  key={index}
+                  className="border border-gray-200 rounded-lg p-6 bg-gray-50"
+                >
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800">
+                      Soal {index + 1}
+                    </h3>
+                    <div className="space-x-2">
+                      {questions.length > 1 && (
+                        <button
+                          onClick={() => removeQuestion(index)}
+                          className="text-red-500 hover:text-red-700 transition-colors"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      )}
                       <button
-                        onClick={() => removeQuestion(index)}
-                        className="text-red-500 hover:text-red-700 transition-colors"
+                        onClick={() => startEditing(index)}
+                        className="text-blue-500 hover:text-blue-700 transition-colors"
                       >
-                        <Trash2 size={20} />
+                        <Edit size={20} />
                       </button>
-                    )}
-                    <button
-                      onClick={() => startEditing(index)}
-                      className="text-blue-500 hover:text-blue-700 transition-colors"
-                    >
-                      <Edit size={20} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pertanyaan
-                    </label>
-                    <textarea
-                      value={question.soal}
-                      onChange={(e) =>
-                        updateQuestion(index, "soal", e.target.value)
-                      }
-                      className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      rows={3}
-                      placeholder="Masukkan pertanyaan soal..."
-                      disabled={editingIndex !== index}
-                    />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Gambar (URL - opsional)
-                    </label>
-                    <input
-                      type="url"
-                      value={question.gambar}
-                      onChange={(e) =>
-                        updateQuestion(index, "gambar", e.target.value)
-                      }
-                      className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="https://example.com/gambar.jpg"
-                      disabled={editingIndex !== index}
-                    />
-                    {question.gambar && (
-                      <div className="mt-2">
-                        <img
-                          src={question.gambar}
-                          alt="Preview Gambar"
-                          className="max-w-full h-auto mt-2 rounded-lg shadow-md"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src =
-                              "https://via.placeholder.com/300?text=Gambar+tidak+ditemukan";
-                            target.alt = "Gambar tidak valid";
-                          }}
-                          style={{ maxHeight: "200px" }}
+                  <div className="grid gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pertanyaan
+                      </label>
+                      <textarea
+                        value={question.soal}
+                        onChange={(e) =>
+                          updateQuestion(index, "soal", e.target.value)
+                        }
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        rows={3}
+                        placeholder="Masukkan pertanyaan soal..."
+                        disabled={editingIndex !== index}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Gambar (URL - opsional)
+                      </label>
+                      <input
+                        type="url"
+                        value={question.gambar}
+                        onChange={(e) =>
+                          updateQuestion(index, "gambar", e.target.value)
+                        }
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="https://example.com/gambar.jpg"
+                        disabled={editingIndex !== index}
+                      />
+                      {question.gambar && (
+                        <div className="mt-2">
+                          <img
+                            src={question.gambar}
+                            alt="Preview Gambar"
+                            className="max-w-full h-auto mt-2 rounded-lg shadow-md"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src =
+                                "https://via.placeholder.com/300?text=Gambar+tidak+ditemukan";
+                              target.alt = "Gambar tidak valid";
+                            }}
+                            style={{ maxHeight: "200px" }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Opsi A
+                        </label>
+                        <input
+                          type="text"
+                          value={question.opsiA}
+                          onChange={(e) =>
+                            updateQuestion(index, "opsiA", e.target.value)
+                          }
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Pilihan A"
+                          disabled={editingIndex !== index}
                         />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Opsi B
+                        </label>
+                        <input
+                          type="text"
+                          value={question.opsiB}
+                          onChange={(e) =>
+                            updateQuestion(index, "opsiB", e.target.value)
+                          }
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Pilihan B"
+                          disabled={editingIndex !== index}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Opsi C
+                        </label>
+                        <input
+                          type="text"
+                          value={question.opsiC}
+                          onChange={(e) =>
+                            updateQuestion(index, "opsiC", e.target.value)
+                          }
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Pilihan C"
+                          disabled={editingIndex !== index}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Opsi D
+                        </label>
+                        <input
+                          type="text"
+                          value={question.opsiD}
+                          onChange={(e) =>
+                            updateQuestion(index, "opsiD", e.target.value)
+                          }
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Pilihan D"
+                          disabled={editingIndex !== index}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Jawaban Benar
+                      </label>
+                      <select
+                        value={question.jawaban}
+                        onChange={(e) =>
+                          updateQuestion(index, "jawaban", e.target.value)
+                        }
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        disabled={editingIndex !== index}
+                      >
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                      </select>
+                    </div>
+
+                    {editingIndex === index && (
+                      <div className="flex gap-4 mt-4">
+                        <button
+                          onClick={() => saveEditedQuestion(index)}
+                          disabled={isSubmitting}
+                          className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          <Save size={20} />
+                          {isSubmitting ? "Menyimpan..." : "Simpan"}
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="flex items-center gap-2 px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                        >
+                          Batal
+                        </button>
                       </div>
                     )}
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Opsi A
-                      </label>
-                      <input
-                        type="text"
-                        value={question.opsiA}
-                        onChange={(e) =>
-                          updateQuestion(index, "opsiA", e.target.value)
-                        }
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Pilihan A"
-                        disabled={editingIndex !== index}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Opsi B
-                      </label>
-                      <input
-                        type="text"
-                        value={question.opsiB}
-                        onChange={(e) =>
-                          updateQuestion(index, "opsiB", e.target.value)
-                        }
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Pilihan B"
-                        disabled={editingIndex !== index}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Opsi C
-                      </label>
-                      <input
-                        type="text"
-                        value={question.opsiC}
-                        onChange={(e) =>
-                          updateQuestion(index, "opsiC", e.target.value)
-                        }
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Pilihan C"
-                        disabled={editingIndex !== index}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Opsi D
-                      </label>
-                      <input
-                        type="text"
-                        value={question.opsiD}
-                        onChange={(e) =>
-                          updateQuestion(index, "opsiD", e.target.value)
-                        }
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Pilihan D"
-                        disabled={editingIndex !== index}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Jawaban Benar
-                    </label>
-                    <select
-                      value={question.jawaban}
-                      onChange={(e) =>
-                        updateQuestion(index, "jawaban", e.target.value)
-                      }
-                      className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      disabled={editingIndex !== index}
-                    >
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
-                      <option value="D">D</option>
-                    </select>
-                  </div>
-
-                  {editingIndex === index && (
-                    <div className="flex gap-4 mt-4">
-                      <button
-                        onClick={() => saveEditedQuestion(index)}
-                        disabled={isSubmitting}
-                        className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                      >
-                        <Save size={20} />
-                        {isSubmitting ? "Menyimpan..." : "Simpan"}
-                      </button>
-                      <button
-                        onClick={cancelEditing}
-                        className="flex items-center gap-2 px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="flex gap-4 mt-8">
             <button
               onClick={addQuestion}
               className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={!selectedSheet}
             >
               <Plus size={20} />
               Tambah Soal
@@ -468,11 +590,11 @@ const QuizMaker: React.FC = () => {
 
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !selectedSheet}
               className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               <Save size={20} />
-              {isSubmitting ? "Mengirim..." : "Kirim ke Sheet2"}
+              {isSubmitting ? "Mengirim..." : "Kirim ke Sheet"}
             </button>
           </div>
 
@@ -486,7 +608,13 @@ const QuizMaker: React.FC = () => {
             <ol className="text-sm text-yellow-700 mt-2 ml-4 list-decimal space-y-1">
               <li>Google Apps Script sudah terhubung ke spreadsheet Anda.</li>
               <li>URL script sudah benar dan di-deploy sebagai web app.</li>
-              <li>Script memiliki izin untuk menulis ke Sheet2.</li>
+              <li>Script memiliki izin untuk menulis ke sheet yang sesuai.</li>
+              <li>
+                Script mendukung parameter `sheet` untuk menentukan nama sheet.
+              </li>
+              <li>
+                DataMapel sheet memiliki kolom MAPEL, MATERI, dan Nama Sheet.
+              </li>
             </ol>
           </div>
         </div>
