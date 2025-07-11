@@ -936,8 +936,14 @@ const StudentData: React.FC = () => {
 
 const ExamResults: React.FC = () => {
   const [examResults, setExamResults] = useState<ExamResult[]>([]);
+  const [students, setStudents] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [chapters, setChapters] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
+  const [nameFilter, setNameFilter] = useState<string>("");
+  const [subjectFilter, setSubjectFilter] = useState<string>("");
+  const [chapterFilter, setChapterFilter] = useState<string>("");
 
   // Function to format ISO date to DD/MM/YYYY
   const formatDate = (isoDate: string): string => {
@@ -951,22 +957,22 @@ const ExamResults: React.FC = () => {
       });
     } catch (e) {
       console.error("Error formatting date:", e);
-      return isoDate; // Fallback to original if parsing fails
+      return isoDate;
     }
   };
 
+  // Fetch exam results
   const fetchExamResults = () => {
     fetch(`${scriptURL}?action=getExamResults`, {
       method: "GET",
       mode: "cors",
     })
       .then((response) => response.json())
-      .then((data) => {
+      .then((data: { success: boolean; data: any[]; message?: string }) => {
         console.log("Response from getExamResults:", data);
         if (data.success && Array.isArray(data.data)) {
-          const formattedResults = data.data.map((result: any) => {
-            console.log(`Result for ${result.nama || "Unknown"}:`, result);
-            return {
+          const formattedResults: ExamResult[] = data.data.map(
+            (result: ExamResult) => ({
               nama: result.nama || "",
               mata_pelajaran: result.mata_pelajaran || "",
               bab_nama: result.bab_nama || "",
@@ -994,10 +1000,9 @@ const ExamResults: React.FC = () => {
               soal_18: String(result.soal_18 || ""),
               soal_19: String(result.soal_19 || ""),
               soal_20: String(result.soal_20 || ""),
-            };
-          });
+            })
+          );
           console.log("Formatted exam results:", formattedResults);
-          // Only update state if data has changed
           if (
             JSON.stringify(formattedResults) !== JSON.stringify(examResults)
           ) {
@@ -1016,20 +1021,157 @@ const ExamResults: React.FC = () => {
       });
   };
 
+  // Fetch students from DataSiswa
+  const fetchStudents = () => {
+    fetch(`${scriptURL}?action=getFromDataSiswa`, {
+      method: "GET",
+      mode: "cors",
+    })
+      .then((response) => response.json())
+      .then((data: { status: string; data: Student[]; message?: string }) => {
+        console.log("Response from getFromDataSiswa:", data);
+        if (data.status === "success" && Array.isArray(data.data)) {
+          const uniqueStudents = Array.from(
+            new Set(data.data.map((student: Student) => student.nama_siswa))
+          ).sort();
+          setStudents(uniqueStudents);
+        } else {
+          setError("❌ Gagal mengambil data siswa dari DataSiswa.");
+          console.error("Error fetching students:", data.message);
+        }
+      })
+      .catch((error) => {
+        setError("❌ Gagal mengambil data siswa dari DataSiswa.");
+        console.error("Fetch students error:", error);
+      });
+  };
+
+  // Fetch subjects and chapters from DataMapel
+  const fetchMapelData = () => {
+    fetch(`${scriptURL}?action=getMapelData`, {
+      method: "GET",
+      mode: "cors",
+    })
+      .then((response) => response.json())
+      .then(
+        (data: { success: boolean; data: MapelData[]; message?: string }) => {
+          console.log("Response from getMapelData:", data);
+          if (data.success && Array.isArray(data.data)) {
+            const uniqueSubjects = Array.from(
+              new Set(data.data.map((item: MapelData) => item.mapel))
+            ).sort();
+            const uniqueChapters = Array.from(
+              new Set(data.data.map((item: MapelData) => item.materi))
+            ).sort();
+            setSubjects(uniqueSubjects);
+            setChapters(uniqueChapters);
+          } else {
+            setError(
+              "❌ Gagal mengambil data mata pelajaran dan materi dari DataMapel."
+            );
+            console.error("Error fetching mapel data:", data.message);
+          }
+        }
+      )
+      .catch((error) => {
+        setError(
+          "❌ Gagal mengambil data mata pelajaran dan materi dari DataMapel."
+        );
+        console.error("Fetch mapel error:", error);
+      });
+  };
+
   useEffect(() => {
-    // Initial fetch
     fetchExamResults();
-
-    // Set up polling every 10 seconds
+    fetchStudents();
+    fetchMapelData();
     const intervalId = setInterval(fetchExamResults, 10000);
-
-    // Clean up interval on component unmount
     return () => clearInterval(intervalId);
   }, []);
+
+  // Filter the exam results based on dropdown selections
+  const filteredResults = examResults.filter(
+    (result) =>
+      (!nameFilter || result.nama === nameFilter) &&
+      (!subjectFilter || result.mata_pelajaran === subjectFilter) &&
+      (!chapterFilter || result.bab_nama === chapterFilter)
+  );
 
   return (
     <div className="container mx-auto p-4">
       <h2 className="text-2xl font-bold mb-4">Hasil Ujian</h2>
+
+      {/* Dropdown Filters */}
+      <div className="mb-4 flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-sm font-medium text-gray-700">
+            Nama
+          </label>
+          <select
+            value={nameFilter}
+            onChange={(e) => setNameFilter(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+          >
+            <option value="">Semua Nama</option>
+            {students.length === 0 ? (
+              <option value="" disabled>
+                Tidak ada data siswa
+              </option>
+            ) : (
+              students.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-sm font-medium text-gray-700">
+            Mata Pelajaran
+          </label>
+          <select
+            value={subjectFilter}
+            onChange={(e) => setSubjectFilter(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+          >
+            <option value="">Semua Mata Pelajaran</option>
+            {subjects.length === 0 ? (
+              <option value="" disabled>
+                Tidak ada data mata pelajaran
+              </option>
+            ) : (
+              subjects.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-sm font-medium text-gray-700">Bab</label>
+          <select
+            value={chapterFilter}
+            onChange={(e) => setChapterFilter(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+          >
+            <option value="">Semua Bab</option>
+            {chapters.length === 0 ? (
+              <option value="" disabled>
+                Tidak ada data materi
+              </option>
+            ) : (
+              chapters.map((chapter) => (
+                <option key={chapter} value={chapter}>
+                  {chapter}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+      </div>
+
       {isLoading && <p>Loading...</p>}
       {error && <p className="text-red-500">{error}</p>}
       {!isLoading && !error && (
@@ -1067,14 +1209,14 @@ const ExamResults: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {examResults.length === 0 ? (
+              {filteredResults.length === 0 ? (
                 <tr>
                   <td colSpan={27} className="py-2 px-4 border text-center">
-                    Tidak ada data hasil ujian.
+                    Tidak ada data hasil ujian yang sesuai dengan filter.
                   </td>
                 </tr>
               ) : (
-                examResults.map((result, index) => (
+                filteredResults.map((result, index) => (
                   <tr key={index}>
                     <td className="py-2 px-4 border">{result.nama}</td>
                     <td className="py-2 px-4 border">
